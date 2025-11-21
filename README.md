@@ -1,93 +1,136 @@
-# SO 2025 Project
+# Projeto SO-25/26 - 1ª Fase - Pacmanist
 
+## Descrição
 
+**Pacmanist** é um jogo inspirado no clássico Pacman, desenvolvido como código base do projeto da disciplina de Sistemas Operativos (SO-25/26). 
+O jogo implementa um sistema de agentes (Pacman e monstros) que se movem num tabuleiro, com o objetivo de coletar pontos enquanto evitam os monstros.
 
-## Getting started
+## Estrutura do Projeto
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+### Ficheiros Principais
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- **`game.c`** - Ficheiro principal que contém o loop main do jogo, controlando a lógica do mesmo e a sequência de eventos.
+- **`board.h`** - Definições das estruturas de dados do tabuleiro e dos agentes (Pacman e monstros).
+- **`board.c`** - Implementação da lógica do tabuleiro e movimentação dos agentes.
+- **`display.h`** / **`display.c`** - Interface gráfica que faz uso da biblioteca `ncurses` para desenhar o tabuleiro e UI, abstraindo a complexidade.
 
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+### Estrutura de Diretórios
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.rnl.tecnico.ulisboa.pt/ist1113963/so25-project.git
-git branch -M master
-git push -uf origin master
+SO-2526-Proj1/
+├── Makefile
+├── README.md
+├── ncurses.suppression
+├── bin/                    # Executáveis gerados
+│   └── Pacmanist
+├── obj/                    # Ficheiros objeto (.o)
+├── include/                # Ficheiros de cabeçalho
+│   ├── board.h
+│   └── display.h
+└── src/                    # Código fonte
+    ├── board.c
+    ├── display.c
+    └── game.c
 ```
 
-## Integrate with your tools
+## Dependências
 
-- [ ] [Set up project integrations](https://gitlab.rnl.tecnico.ulisboa.pt/ist1113963/so25-project/-/settings/integrations)
+### NCurses Library
 
-## Collaborate with your team
+O projeto requer a biblioteca `NCurses` para a interface gráfica do terminal.
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+**Ubuntu/Debian:**
+```bash
+sudo apt-get install libncurses-dev
+```
 
-## Test and Deploy
+**CentOS/RHEL/Fedora:**
+```bash
+sudo yum install ncurses-devel
+# ou para versões mais recentes:
+sudo dnf install ncurses-devel
+```
 
-Use the built-in continuous integration in GitLab.
+**macOS (usando Homebrew):**
+```bash
+brew install ncurses
+```
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+## Compilação
 
-***
+O projeto utiliza um Makefile para automatizar o processo de compilação.
 
-# Editing this README
+### Regras do Makefile Disponíveis
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+- **`make`** ou **`make all`** - Compila o projeto completo
+- **`make pacmanist`** - Compila o executável principal
+- **`make run`** - Compila e executa o jogo
+- **`make clean`** - Remove os ficheiros objeto e executável
+- **`make folders`** - Cria os diretórios necessários (`obj/`: que irá conter os *.o, e `bin/`: que irá conter o executável)
 
-## Suggestions for a good README
+### Compilação Manual
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+```bash
+# Compilar o projeto
+make
 
-## Name
-Choose a self-explaining name for your project.
+# Ou compilar e executar diretamente
+make run
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+### Configuração do Compilador
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+O projeto está configurado para:
+- **Compilador:** GCC
+- **Standard:** C17
+- **Flags de Compilação:** `-g -Wall -Wextra -Werror -std=c17 -D_POSIX_C_SOURCE=200809L`
+- **Linking:** `-lncurses`
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+## Execução
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+Após a compilação, o executável será gerado em `bin/Pacmanist`.
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+```bash
+# Executar o jogo
+./bin/Pacmanist
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+# Ou usar o Makefile
+make run
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+## Requisitos do Sistema
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+- Sistema operativo Unix/Linux ou macOS
+- GCC compiler
+- NCurses library
+- Make utility
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+## Debugging
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+### Ficheiro de Log
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+Para facilitar a depuração, o programa gera automaticamente um ficheiro `debug.log` que contém informações detalhadas sobre a execução do jogo. O log inclui:
 
-## License
-For open source projects, say how it is licensed.
+- Teclas pressionadas pelo jogador (ex: `KEY A`, `KEY Q`)
+- Atualizações do ecrã (`REFRESH`)
+- Informações do nível (dimensões, tempo, ficheiros dos agentes)
+- Estado atual do tabuleiro com as posições dos agentes (P=Pacman, M=Monster, W=Wall)
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Este ficheiro é especialmente útil para rastrear o comportamento dos agentes, sequência de movimentos, e debug de colisões, etc.
+
+### Valgrind
+
+A biblioteca ncurses contem alguns [memory leaks](https://invisible-island.net/ncurses/ncurses.faq.html#config_leaks) a serem ignorados.
+Para suprimir os reports do valgrind associados a estes leaks, e facilitar a intrepretação do output da ferramenta, o código base contem o ficheiro `ncurses.suppressions` que pode ser passado para o valgrind com a flag `--suppressions=<suppression_file>`.
+Memory leaks associados ao ncurses (ou seja, ignorados pelo suppression file fornecido), não serão contabilizados na avaliação.
+
+### GDB
+
+Dado que a biblioteca ncurses captura totalmente o terminal, o uso de ferramentas como o gdb tem de ser adaptado.
+Em vez de correr o executavel com o gdb como explicado no guião da [deteção de erros](https://github.com/tecnico-so/lab_detecao-erros), deve executar o Pacmanist normalmente e, numa segunda janela, fazer "attach" ao programa, atravez do seguinte comando:
+
+```bash
+gdb -p <Pacmaist_PID>
+```
+
+Note que o Pacmanist continuará a correr até ao momento de fazer attach, logo, se quiser fazer debug no inicio da aplicação, pode adicionar um delay no inicio do programa, para dar tempo de fazer attach. 
