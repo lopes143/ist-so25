@@ -3,7 +3,12 @@
 #include <stdio.h>
 #include <time.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <stdarg.h>
+#include <string.h>
+
+#define BUF_SIZE 1024
+
 
 FILE * debugfile;
 
@@ -375,40 +380,80 @@ int load_ghost(board_t* board) {
     return 0;
 }
 
-int load_level(board_t *board, int points) {
-    board->height = 5;
-    board->width = 10;
-    board->tempo = 10;
+int load_level(board_t *board, int points, char *level_file) {
 
-    board->n_ghosts = 2;
-    board->n_pacmans = 1;
+    int fd = open("test.txt", O_RDONLY);
 
-    board->board = calloc(board->width * board->height, sizeof(board_pos_t));
-    board->pacmans = calloc(board->n_pacmans, sizeof(pacman_t));
-    board->ghosts = calloc(board->n_ghosts, sizeof(ghost_t));
-
-    sprintf(board->level_name, "Static Level");
-
-    for (int i = 0; i < board->height; i++) {
-        for (int j = 0; j < board->width; j++) {
-            if (i == 0 || j == 0 || j == (board->width - 1)) {
-                board->board[i * board->width + j].content = 'W';
-            }
-            else if (i == 4 && j == 8) {
-                board->board[i * board->width + j].content = ' ';
-                board->board[i * board->width + j].has_portal = 1;
-            }
-            else {
-                board->board[i * board->width + j].content = ' ';
-                board->board[i * board->width + j].has_dot = 1;
-            }
-        }
+    if (fd < 0) {
+        perror("open error");
+        return EXIT_FAILURE;
     }
 
-    load_ghost(board);
-    load_pacman(board, points);
+    char buf[BUF_SIZE];
+    char fileText[] = "";
+    int inComment = 0;
+    ssize_t numRead;
 
-    return 0;
+    while ((numRead = read(fd, buf, BUF_SIZE - 1)) > 0) {
+        strcat(fileText, buf);
+    }
+
+    strcat(fileText, '\0');
+
+    if (numRead < 0) {
+        perror("read error");
+        return EXIT_FAILURE;
+    }
+
+    int i = 0;
+    while(fileText[i] != '\0') {
+        // Handle comments
+        if (fileText[i] == '#') {
+            inComment = 1;
+        }
+        else if (fileText[i] == '\n') {
+            inComment = 0;
+        }
+        else if (!inComment) {
+            // Process the character
+            putchar(fileText[i]);
+        }
+        i++;
+    }
+
+    // board->height = 5;
+    // board->width = 10;
+    // board->tempo = 10;
+
+    // board->n_ghosts = 2;
+    // board->n_pacmans = 1;
+
+    // board->board = calloc(board->width * board->height, sizeof(board_pos_t));
+    // board->pacmans = calloc(board->n_pacmans, sizeof(pacman_t));
+    // board->ghosts = calloc(board->n_ghosts, sizeof(ghost_t));
+
+    // sprintf(board->level_name, "Static Level");
+
+    // for (int i = 0; i < board->height; i++) {
+    //     for (int j = 0; j < board->width; j++) {
+    //         if (i == 0 || j == 0 || j == (board->width - 1)) {
+    //             board->board[i * board->width + j].content = 'W';
+    //         }
+    //         else if (i == 4 && j == 8) {
+    //             board->board[i * board->width + j].content = ' ';
+    //             board->board[i * board->width + j].has_portal = 1;
+    //         }
+    //         else {
+    //             board->board[i * board->width + j].content = ' ';
+    //             board->board[i * board->width + j].has_dot = 1;
+    //         }
+    //     }
+    // }
+
+    // load_ghost(board);
+    // load_pacman(board, points);
+
+    // return 0;
 }
 
 void unload_level(board_t * board) {
