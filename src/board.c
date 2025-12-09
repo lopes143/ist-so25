@@ -339,12 +339,78 @@ void kill_pacman(board_t* board, int pacman_index) {
 
 // Static Loading
 int load_pacman(board_t* board, int points) {
-    board->board[1 * board->width + 1].content = 'P'; // Pacman
-    board->pacmans[0].pos_x = 1;
-    board->pacmans[0].pos_y = 1;
-    board->pacmans[0].alive = 1;
-    board->pacmans[0].points = points;
-    return 0;
+    char *path = board->pacman_file;
+    pacman_t *pacman = &board->pacmans[board->n_pacmans-1];
+    const int fd = open(path, O_RDONLY);
+
+    if (fd<0) {
+        perror("Load pacman file error!");
+        return EXIT_FAILURE;
+    }
+
+    fseek(fd,0,SEEK_END);
+    const long fsize = ftell(fd);
+    fseek(fd,0,SEEK_SET);
+
+    char buf[BUF_SIZE];
+    int readChars;
+    
+    char *fileText = calloc(fsize+1,sizeof(char));
+    if (fileText==NULL) {
+        perror("Unable to allocate memory for pacman content");
+        return EXIT_FAILURE;
+    }
+
+    while ((readChars=read(fd,buf,BUF_SIZE-1))>0) {
+        strcat(fileText, buf);
+    }
+
+    strcat(fileText, '\0'); //maybe not needed
+
+    char *line_saveptr;
+    char *line = strtok_r(fileText, "\n", &line_saveptr);
+    while (line != NULL) {
+        if (line[0]=='#' || line[0]=='\0') { //Ignore comments and empty lines
+            line = strtok_r(NULL, "\n", &line_saveptr);
+            continue;
+        }
+
+        char *args[MAX_GHOSTS]; //Large enough
+        int arg_count = 0;
+
+        char *word_saveptr;
+        char *word = strtok_r(line, " ", &word_saveptr);
+        while (word != NULL && arg_count < MAX_GHOSTS) {
+            args[arg_count++] = word; //Store the pointer, don't copy the string
+            word = strtok_r(NULL, " ", &word_saveptr);
+        }
+
+        if (!strcmp(args[0], "PASSO")) { //parse PASSO
+            pacman->passo=atoi(args[1]);
+        }
+        else if (!strcmp(args[0], "POS")) { //parse POS
+            pacman->pos_x=atoi(args[1]);
+            pacman->pos_y=atoi(args[2]);
+            board->board[pacman->pos_x * board->width + pacman->pos_y].content='P';
+        }
+        else {
+            //parse commands
+            pacman->moves[pacman->n_moves].command=atoi(args[0]);
+            if (arg_count>1 && !strcmp(args[0],"T")) {
+                pacman->moves[pacman->n_moves].turns=atoi(args[1]);
+                pacman->moves[pacman->n_moves].turns_left=atoi(args[1]);
+            }
+            else {
+                pacman->moves[pacman->n_moves].turns=1;
+                pacman->moves[pacman->n_moves].turns_left=1;
+            }
+            pacman->n_moves++;
+        }
+    }
+
+    pacman->alive=1;
+    pacman->points=points;
+    return EXIT_FAILURE;
 }
 
 // Static Loading
@@ -381,7 +447,7 @@ int load_ghost(board_t* board) {
 }
 
 int load_level(board_t *board, int points, char *level_file) {
-    int fd = open("test.txt", O_RDONLY);
+    int fd = open("test.txt", O_RDONLY); //TODO change test.txt
 
     if (fd < 0) {
         perror("Load level file error!");
@@ -402,11 +468,11 @@ int load_level(board_t *board, int points, char *level_file) {
         close(fd);
         return EXIT_FAILURE;
     }
-    while ((readChars==read(fd, buf, BUF_SIZE-1))>0) {
+    while ((readChars=read(fd, buf, BUF_SIZE-1))>0) {
         strcat(fileText, buf);
     }
 
-    strcat(fileText, '\0');
+    strcat(fileText, '\0'); //maybe not needed
 
     char *line_saveptr;
     char *line = strtok_r(fileText, "\n", &line_saveptr);
@@ -422,40 +488,35 @@ int load_level(board_t *board, int points, char *level_file) {
 
         char *token = strtok_r(line, " ", &word_saveptr);
 
-        while (token != NULL && arg_count < (MAX_GHOSTS + 2)) {
+        while (token != NULL) {
             args[arg_count++] = token; // Store the pointer, don't copy the string
             token = strtok_r(NULL, " ", &word_saveptr);
         }
 
-        if (arg_count == 0) { // Skip lines with only whitespace
-            line = strtok_r(NULL, "\n", &line_saveptr);
-            continue;
-        }
-
-        if (strcmp(args[0], "D") == 0 && arg_count >= 3) {
+        if (!strcmp(args[0], "D")) { //parse 'DIM'
             board->width = atoi(args[1]);
             board->height = atoi(args[2]);
             board->board = calloc(board->width * board->height, sizeof(board_pos_t));
         }
-        else if (strcmp(args[0], "T") == 0 && arg_count >= 2) {
+        else if (!strcmp(args[0], "T")) { //parse TEMPO
             board->tempo = atoi(args[1]);
         }
-        else if (strcmp(args[0], "P") == 0 && arg_count >= 2) {
+        else if (!strcmp(args[0], "P")) { //parse PAC
             strcpy(board->pacman_file, args[1]);
             board->n_pacmans = 1;
             board->pacmans = calloc(board->n_pacmans, sizeof(pacman_t));
 
-            load_pacman(board, points); // This will need to be dynamic later
+            load_pacman(board, points);
         }
-        else if (strcmp(args[0], "M") == 0 && arg_count > 1) {
+        else if (!strcmp(args[0], "M")) { //parse MON
             board->n_ghosts = arg_count-1;
             board->ghosts = calloc(board->n_ghosts, sizeof(ghost_t));
             for (int i=1; i<arg_count; i++) {
                 strcpy(board->ghosts_files[i-1], args[i]);
             }
-            load_ghost(board); // This will need to be dynamic later
+            load_ghost(board); //TODO This will need to be dynamic later
         }
-        else if (arg_count == 1 && board->board != NULL && BoardRowParser < board->height) {
+        else { //parse board matrix
             char *board_line_str = args[0];
             for (size_t i = 0; i < strlen(board_line_str) && i < board->width; i++) {
                 board_pos_t *pos = &board->board[BoardRowParser * board->width + i];
