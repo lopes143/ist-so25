@@ -3,12 +3,16 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <string.h>
 
 #define CONTINUE_PLAY 0
 #define NEXT_LEVEL 1
 #define QUIT_GAME 2
 #define LOAD_BACKUP 3
 #define CREATE_BACKUP 4
+
+
 
 void screen_refresh(board_t * game_board, int mode) {
     debug("REFRESH\n");
@@ -70,8 +74,34 @@ int play_board(board_t * game_board) {
 int main(int argc, char** argv) {
     if (argc != 2) {
         printf("Usage: %s <level_directory>\n", argv[0]);
-        // TODO receive inputs
+        return EXIT_FAILURE;
     }
+    DIR *dir = opendir(argv[1]);
+    if (dir==NULL) {
+        perror("Failed to open directory");
+        return EXIT_FAILURE;
+    }
+
+    char levels[MAX_LEVELS][MAX_FILENAME] = {0};
+    int level_count = 0;
+    while (true) {
+        struct dirent *dp = readdir(dir);
+        if (dp==NULL) break;
+        if (!strcmp(dp->d_name,".") || !strcmp(dp->d_name,"..")) {
+            continue; //Skip . and ..
+        }
+
+        char *ext = strrchr(dp->d_name, '.');
+        if (ext!=NULL && !strcmp(ext, ".lvl")) {
+            strcpy(levels[level_count++],dp->d_name);
+        }
+    }
+
+    //print filenames
+    for (int i=0; i<level_count; i++) {
+        printf("%s\n", levels[i]);
+    }
+
 
     // Random seed for any random movements
     srand((unsigned int)time(NULL));
@@ -80,12 +110,13 @@ int main(int argc, char** argv) {
 
     terminal_init();
     
-    int accumulated_points = 0;
+    int accumulated_points = 0,
+        current_level = 0;
     bool end_game = false;
     board_t game_board;
 
-    while (!end_game) {
-        load_level(&game_board, accumulated_points);
+    while (!end_game && current_level<level_count) {
+        load_level(&game_board, accumulated_points, levels[current_level]);
         draw_board(&game_board, DRAW_MENU);
         refresh_screen();
 
@@ -95,6 +126,7 @@ int main(int argc, char** argv) {
             if(result == NEXT_LEVEL) {
                 screen_refresh(&game_board, DRAW_WIN);
                 sleep_ms(game_board.tempo);
+                current_level++;
                 break;
             }
 

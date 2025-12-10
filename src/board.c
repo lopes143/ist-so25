@@ -348,24 +348,23 @@ int load_pacman(board_t* board, int points) {
         return EXIT_FAILURE;
     }
 
-    fseek(fd,0,SEEK_END);
-    const long fsize = ftell(fd);
-    fseek(fd,0,SEEK_SET);
+    lseek(fd,0,SEEK_END);
+    off_t fsize = lseek(fd,0,SEEK_CUR);
+    lseek(fd,0,SEEK_SET);
 
-    char buf[BUF_SIZE];
+    char buf[BUF_SIZE] = {0};
     int readChars;
     
     char *fileText = calloc(fsize+1,sizeof(char));
     if (fileText==NULL) {
         perror("Unable to allocate memory for pacman content");
+        close(fd);
         return EXIT_FAILURE;
     }
 
     while ((readChars=read(fd,buf,BUF_SIZE-1))>0) {
         strcat(fileText, buf);
     }
-
-    strcat(fileText, '\0'); //maybe not needed
 
     char *line_saveptr;
     char *line = strtok_r(fileText, "\n", &line_saveptr);
@@ -393,70 +392,113 @@ int load_pacman(board_t* board, int points) {
             pacman->pos_y=atoi(args[2]);
             board->board[pacman->pos_x * board->width + pacman->pos_y].content='P';
         }
-        else {
-            //parse commands
-            pacman->moves[pacman->n_moves].command=atoi(args[0]);
+        else { //parse commands
+            pacman->moves[pacman->n_moves].command=*args[0];
             if (arg_count>1 && !strcmp(args[0],"T")) {
                 pacman->moves[pacman->n_moves].turns=atoi(args[1]);
-                pacman->moves[pacman->n_moves].turns_left=atoi(args[1]);
             }
             else {
                 pacman->moves[pacman->n_moves].turns=1;
-                pacman->moves[pacman->n_moves].turns_left=1;
             }
             pacman->n_moves++;
         }
+        line = strtok_r(NULL, "\n", &line_saveptr);
     }
 
     pacman->alive=1;
     pacman->points=points;
+    close(fd);
+    free(fileText);
     return EXIT_FAILURE;
 }
 
 // Static Loading
 int load_ghost(board_t* board) {
-    // Ghost 0
-    board->board[3 * board->width + 1].content = 'M'; // Monster
-    board->ghosts[0].pos_x = 1;
-    board->ghosts[0].pos_y = 3;
-    board->ghosts[0].passo = 0;
-    board->ghosts[0].waiting = 0;
-    board->ghosts[0].current_move = 0;
-    board->ghosts[0].n_moves = 16;
-    for (int i = 0; i < 8; i++) {
-        board->ghosts[0].moves[i].command = 'D';
-        board->ghosts[0].moves[i].turns = 1; 
-    }
-    for (int i = 8; i < 16; i++) {
-        board->ghosts[0].moves[i].command = 'A';
-        board->ghosts[0].moves[i].turns = 1; 
+    for (int i=0; i<board->n_ghosts; i++) {
+        ghost_t *ghost = &board->ghosts[i];
+        char *ghostPath = board->ghosts_files[i];
+        const int fd = open(ghostPath, O_RDONLY);
+
+        if (fd<0) {
+            perror("Load ghost file error!");
+            return EXIT_FAILURE;
+        }
+
+        lseek(fd,0,SEEK_END);
+        off_t fsize = lseek(fd,0,SEEK_CUR);
+        lseek(fd,0,SEEK_SET);
+
+        char buf[BUF_SIZE];
+        int readChars;
+
+        char *fileText = calloc(fsize+1,sizeof(char));
+        if (fileText==NULL) {
+            perror("Unable to allocate memory for ghost content");
+            close(fd);
+            return EXIT_FAILURE;
+        }
+
+        while ((readChars=read(fd,buf,BUF_SIZE-1))>0) {
+            strcat(fileText,buf);
+        }
+
+        char *line_saveptr;
+        char *line = strtok_r(fileText, "\n", &line_saveptr);
+        while (line!=NULL) {
+            if (line[0]=='#' || line[0]=='\0') { //Ignore comments and empty lines
+                line = strtok_r(NULL, "\n", &line_saveptr);
+                continue;
+            }
+
+            char *args[MAX_GHOSTS]; //Large enough
+            int arg_count=0;
+
+            char *word_saveptr;
+            char *word = strtok_r(line, " ", &word_saveptr);
+            while (word!=NULL && arg_count<MAX_GHOSTS) {
+                args[arg_count++] = word; //Store the pointer, don't copy the string
+                word = strtok_r(NULL, " ", &word_saveptr);
+            }
+
+            if (!strcmp(args[0], "PASSO")) { //parse PASSO
+                ghost->passo=atoi(args[1]);
+            }
+            else if (!strcmp(args[0], "POS")) { //parse POS
+                ghost->pos_x=atoi(args[1]);
+                ghost->pos_y=atoi(args[2]);
+                board->board[ghost->pos_x * board->width + ghost->pos_y].content='M';
+            }
+            else { //parse commands
+                ghost->moves[ghost->n_moves].command=*args[0];
+                if (arg_count>1 && !strcmp(args[0],"T")) {
+                    ghost->moves[ghost->n_moves].turns=atoi(args[1]);
+                }
+                else {
+                    ghost->moves[ghost->n_moves].turns=1;
+                }
+                ghost->n_moves++;
+            }
+            line = strtok_r(NULL, "\n", &line_saveptr);
+        }
+
+        close(fd);
+        free(fileText);
     }
 
-    // Ghost 1
-    board->board[2 * board->width + 4].content = 'M'; // Monster
-    board->ghosts[1].pos_x = 4;
-    board->ghosts[1].pos_y = 2;
-    board->ghosts[1].passo = 1;
-    board->ghosts[1].waiting = 1;
-    board->ghosts[1].current_move = 0;
-    board->ghosts[1].n_moves = 1;
-    board->ghosts[1].moves[0].command = 'R'; // Random
-    board->ghosts[1].moves[0].turns = 1; 
-    
-    return 0;
+    return EXIT_SUCCESS;
 }
 
-int load_level(board_t *board, int points, char *level_file) {
-    int fd = open("test.txt", O_RDONLY); //TODO change test.txt
+int load_level(board_t *board, int acc_points, char *level_file) {
+    const int fd = open(level_file, O_RDONLY);
 
     if (fd < 0) {
         perror("Load level file error!");
         return EXIT_FAILURE;
     }
 
-    fseek(fd, 0, SEEK_END);
-    long fsize = ftell(fd); //get file size by putting the cursor at the end
-    fseek(fd, 0, SEEK_SET); //get cursor back to beginning
+    lseek(fd,0,SEEK_END);               //get file size by putting the cursor at the end
+    off_t fsize = lseek(fd,0,SEEK_CUR);
+    lseek(fd,0,SEEK_SET);               //get cursor back to beginning
 
     char buf[BUF_SIZE];
     int readChars;
@@ -472,8 +514,6 @@ int load_level(board_t *board, int points, char *level_file) {
         strcat(fileText, buf);
     }
 
-    strcat(fileText, '\0'); //maybe not needed
-
     char *line_saveptr;
     char *line = strtok_r(fileText, "\n", &line_saveptr);
     while (line != NULL) {
@@ -484,31 +524,30 @@ int load_level(board_t *board, int points, char *level_file) {
 
         char *args[MAX_GHOSTS+2]; //Sufficiently large for MON command
         int arg_count=0;
+
         char *word_saveptr;
-
-        char *token = strtok_r(line, " ", &word_saveptr);
-
-        while (token != NULL) {
-            args[arg_count++] = token; // Store the pointer, don't copy the string
-            token = strtok_r(NULL, " ", &word_saveptr);
+        char *word = strtok_r(line, " ", &word_saveptr);
+        while (word != NULL) {
+            args[arg_count++] = word; // Store the pointer, don't copy the string
+            word = strtok_r(NULL, " ", &word_saveptr);
         }
 
-        if (!strcmp(args[0], "D")) { //parse 'DIM'
+        if (!strcmp(args[0], "DIM")) { //parse 'DIM'
             board->width = atoi(args[1]);
             board->height = atoi(args[2]);
             board->board = calloc(board->width * board->height, sizeof(board_pos_t));
         }
-        else if (!strcmp(args[0], "T")) { //parse TEMPO
+        else if (!strcmp(args[0], "TEMPO")) { //parse TEMPO
             board->tempo = atoi(args[1]);
         }
-        else if (!strcmp(args[0], "P")) { //parse PAC
+        else if (!strcmp(args[0], "PAC")) { //parse PAC
             strcpy(board->pacman_file, args[1]);
             board->n_pacmans = 1;
             board->pacmans = calloc(board->n_pacmans, sizeof(pacman_t));
 
-            load_pacman(board, points);
+            load_pacman(board, acc_points);
         }
-        else if (!strcmp(args[0], "M")) { //parse MON
+        else if (!strcmp(args[0], "MON")) { //parse MON
             board->n_ghosts = arg_count-1;
             board->ghosts = calloc(board->n_ghosts, sizeof(ghost_t));
             for (int i=1; i<arg_count; i++) {
@@ -518,7 +557,7 @@ int load_level(board_t *board, int points, char *level_file) {
         }
         else { //parse board matrix
             char *board_line_str = args[0];
-            for (size_t i = 0; i < strlen(board_line_str) && i < board->width; i++) {
+            for (size_t i=0; i<strlen(board_line_str) && i<(size_t)board->width; i++) {
                 board_pos_t *pos = &board->board[BoardRowParser * board->width + i];
                 switch (board_line_str[i]) {
                     case 'X':
@@ -541,7 +580,8 @@ int load_level(board_t *board, int points, char *level_file) {
         line = strtok_r(NULL, "\n", &line_saveptr);
     }
 
-    free(fileText);
+    close(fd);
+    free(fileText);   
     return EXIT_SUCCESS;
 }
 
