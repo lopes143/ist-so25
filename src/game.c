@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <string.h>
+#include <sys/wait.h>
 
 #define CONTINUE_PLAY 0
 #define NEXT_LEVEL 1
@@ -12,7 +13,8 @@
 #define LOAD_BACKUP 3
 #define CREATE_BACKUP 4
 
-
+#define OUT_BACKUP 0
+#define IN_BACKUP 1
 
 void screen_refresh(board_t * game_board, int mode) {
     debug("REFRESH\n");
@@ -47,6 +49,16 @@ int play_board(board_t * game_board) {
         return QUIT_GAME;
     }
 
+    if (play->command == 'G') {
+        // Save game state
+        return CREATE_BACKUP;
+    }
+
+    if (play->command == 'L') {
+        // Load game state
+        return LOAD_BACKUP;
+    }
+
     int result = move_pacman(game_board, 0, play);
     if (result == REACHED_PORTAL) {
         // Next level
@@ -72,6 +84,8 @@ int play_board(board_t * game_board) {
 }
 
 int main(int argc, char** argv) {
+    int pid, estado, isInBackup=OUT_BACKUP;
+
     if (argc != 2) {
         printf("Usage: %s <level_directory>\n", argv[0]);
         return EXIT_FAILURE;
@@ -134,6 +148,22 @@ int main(int argc, char** argv) {
                 sleep_ms(game_board.tempo);
                 end_game = true;
                 break;
+            }
+
+            if(result == CREATE_BACKUP && isInBackup == OUT_BACKUP) {
+                pid = fork();
+                if (pid == 0) {
+                    isInBackup=IN_BACKUP;
+                } else if (pid > 0) {
+                    pid = wait(&estado);
+                } else {
+                    // Fork failed
+                    perror("Fork failed");
+                }
+            }
+
+            if(result == LOAD_BACKUP && isInBackup == IN_BACKUP) {
+                exit(0);
             }
     
             screen_refresh(&game_board, DRAW_MENU); 
