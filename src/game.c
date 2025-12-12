@@ -12,6 +12,7 @@
 #define QUIT_GAME 2
 #define LOAD_BACKUP 3
 #define CREATE_BACKUP 4
+#define PACMAN_DIED 5
 
 #define OUT_BACKUP 0
 #define IN_BACKUP 1
@@ -66,7 +67,7 @@ int play_board(board_t * game_board) {
     }
 
     if(result == DEAD_PACMAN) {
-        return QUIT_GAME;
+        return PACMAN_DIED;
     }
     
     for (int i = 0; i < game_board->n_ghosts; i++) {
@@ -143,6 +144,15 @@ int main(int argc, char** argv) {
                 break;
             }
 
+            if(result == PACMAN_DIED) {
+                if (isInBackup == IN_BACKUP) {
+                    exit(0);
+                }else 
+                {
+                    result = QUIT_GAME;
+                }
+            }
+
             if(result == QUIT_GAME) {
                 screen_refresh(&game_board, DRAW_GAME_OVER); 
                 sleep_ms(game_board.tempo);
@@ -160,10 +170,6 @@ int main(int argc, char** argv) {
                     // Fork failed
                     perror("Fork failed");
                 }
-            }
-
-            if(result == LOAD_BACKUP && isInBackup == IN_BACKUP) {
-                exit(0);
             }
     
             screen_refresh(&game_board, DRAW_MENU); 
