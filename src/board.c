@@ -512,6 +512,7 @@ int load_ghost(board_t *board) {
 int load_level(board_t *board, int acc_points, char *parent, char *level_file) {
     char path[MAX_FILENAME];
     strcpy(path,parent);
+    if (path[strlen(path)-1]!='/') strcat(path,"/"); //add missing slash
     strcat(path,level_file);
     const int fd = open(path, O_RDONLY);
 
@@ -565,15 +566,19 @@ int load_level(board_t *board, int acc_points, char *parent, char *level_file) {
             board->tempo = atoi(args[1]);
         }
         else if (!strcmp(args[0], "PAC")) { //parse PAC
-            strcpy(board->pacman_file, parent);
-            strcat(board->pacman_file, args[1]);
+            char *pac_file = board->pacman_file;
+            strcpy(pac_file, parent);
+            if (pac_file[strlen(pac_file)-1]!='/') strcat(pac_file,"/");
+            strcat(pac_file, args[1]);
         }
         else if (!strcmp(args[0], "MON")) { //parse MON
             board->n_ghosts = arg_count-1;
             board->ghosts = calloc(board->n_ghosts, sizeof(ghost_t));
             for (int i=1; i<arg_count; i++) {
-                strcpy(board->ghosts_files[i-1], parent);
-                strcat(board->ghosts_files[i-1], args[i]);
+                char *gh_file = board->ghosts_files[i-1];
+                strcpy(gh_file, parent);
+                if (gh_file[strlen(gh_file)-1]!='/') strcat(gh_file,"/");
+                strcat(gh_file, args[i]);
             }
         }
         else { //parse board matrix

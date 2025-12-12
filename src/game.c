@@ -17,6 +17,9 @@
 #define OUT_BACKUP 0
 #define IN_BACKUP 1
 
+#define EXIT_LOAD_BACKUP 0
+#define EXIT_WIN 1
+
 void screen_refresh(board_t * game_board, int mode) {
     debug("REFRESH\n");
     draw_board(game_board, mode);
@@ -85,7 +88,7 @@ int play_board(board_t * game_board) {
 }
 
 int main(int argc, char** argv) {
-    int pid, estado, isInBackup=OUT_BACKUP;
+    int pid, state, isInBackup=OUT_BACKUP;
 
     if (argc != 2) {
         printf("Usage: %s <level_directory>\n", argv[0]);
@@ -169,8 +172,16 @@ int main(int argc, char** argv) {
                 if (pid == 0) {
                     isInBackup=IN_BACKUP;
                 } else if (pid > 0) {
-                    pid = wait(&estado);
-                } else {
+                    pid = wait(&state);
+                    if (WIFEXITED(state)) {
+                        int exit_status = WEXITSTATUS(state);
+                        if (exit_status == EXIT_WIN) {
+                            end_game=true;
+                            break;
+                        }
+                    }
+                }
+                else {
                     // Fork failed
                     perror("Fork failed");
                 }
@@ -182,7 +193,11 @@ int main(int argc, char** argv) {
         }
         print_board(game_board);
         unload_level(game_board);
-    }    
+    }
+    
+    if (isInBackup==IN_BACKUP) {
+        exit(EXIT_WIN);
+    }
 
     terminal_cleanup();
 
