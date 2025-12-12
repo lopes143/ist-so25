@@ -1,10 +1,14 @@
-DIM 6 6
+DIM 10 10
 TEMPO 10
 PAC 1.p
 MON 1.m 3.m
-XXoXXX
-XoooXX
-XoXoXX
-Xooo@X
-XooooX
-XXXXXX
+XXoooooXXX
+XoooooooXX
+XoXoooooXX
+Xooooooo@X
+XooooooooX
+XooooooooX
+XooooooooX
+XooooooooX
+XooooooooX
+XXXXXXXXXX

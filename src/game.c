@@ -25,8 +25,8 @@ void screen_refresh(board_t * game_board, int mode) {
 int play_board(board_t * game_board) {
     pacman_t* pacman = &game_board->pacmans[0];
     command_t* play;
+    command_t c;
     if (pacman->n_moves == 0) { // if is user input
-        command_t c; 
         c.command = get_input();
 
         if(c.command == '\0')
@@ -101,7 +101,6 @@ int main(int argc, char** argv) {
     for (int i=0; i<level_count; i++) {
         printf("%s\n", levels[i]);
     }
-
 
     // Random seed for any random movements
     srand((unsigned int)time(NULL));

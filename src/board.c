@@ -338,9 +338,28 @@ void kill_pacman(board_t* board, int pacman_index) {
 }
 
 // Static Loading
-int load_pacman(board_t* board, int points) {
-    char *path = board->pacman_file;
+int load_pacman(board_t *board, int points) {
+    board->n_pacmans=1;
+    board->pacmans=calloc(board->n_pacmans, sizeof(pacman_t));
     pacman_t *pacman = &board->pacmans[board->n_pacmans-1];
+    char *path = board->pacman_file;
+    if (*path=='\0') {
+        //Load default pacman
+        
+        pacman->alive=1;
+        pacman->points=points;
+        for (int i=0; i<board->height*board->width; i++) {
+            if (board->board[i].has_dot) {
+                pacman->pos_x=i%board->width;
+                pacman->pos_y=i/board->width;
+                board->board[i].content='P';
+                break;
+            }
+        }
+        return EXIT_SUCCESS;
+    }
+
+
     const int fd = open(path, O_RDONLY);
 
     if (fd<0) {
@@ -390,7 +409,8 @@ int load_pacman(board_t* board, int points) {
         else if (!strcmp(args[0], "POS")) { //parse POS
             pacman->pos_x=atoi(args[1]);
             pacman->pos_y=atoi(args[2]);
-            board->board[pacman->pos_x * board->width + pacman->pos_y].content='P';
+            const int index = get_board_index(board,pacman->pos_x,pacman->pos_y);
+            board->board[index].content = 'P';
         }
         else { //parse commands
             pacman->moves[pacman->n_moves].command=*args[0];
@@ -409,11 +429,11 @@ int load_pacman(board_t* board, int points) {
     pacman->points=points;
     close(fd);
     free(fileText);
-    return EXIT_FAILURE;
+    return EXIT_SUCCESS;
 }
 
 // Static Loading
-int load_ghost(board_t* board) {
+int load_ghost(board_t *board) {
     for (int i=0; i<board->n_ghosts; i++) {
         ghost_t *ghost = &board->ghosts[i];
         char *ghostPath = board->ghosts_files[i];
@@ -428,7 +448,7 @@ int load_ghost(board_t* board) {
         off_t fsize = lseek(fd,0,SEEK_CUR);
         lseek(fd,0,SEEK_SET);
 
-        char buf[BUF_SIZE];
+        char buf[BUF_SIZE] = {0};
         int readChars;
 
         char *fileText = calloc(fsize+1,sizeof(char));
@@ -466,7 +486,8 @@ int load_ghost(board_t* board) {
             else if (!strcmp(args[0], "POS")) { //parse POS
                 ghost->pos_x=atoi(args[1]);
                 ghost->pos_y=atoi(args[2]);
-                board->board[ghost->pos_x * board->width + ghost->pos_y].content='M';
+                const int index = get_board_index(board,ghost->pos_x,ghost->pos_y);
+                board->board[index].content = 'M';
             }
             else { //parse commands
                 ghost->moves[ghost->n_moves].command=*args[0];
@@ -542,10 +563,6 @@ int load_level(board_t *board, int acc_points, char *level_file) {
         }
         else if (!strcmp(args[0], "PAC")) { //parse PAC
             strcpy(board->pacman_file, args[1]);
-            board->n_pacmans = 1;
-            board->pacmans = calloc(board->n_pacmans, sizeof(pacman_t));
-
-            load_pacman(board, acc_points);
         }
         else if (!strcmp(args[0], "MON")) { //parse MON
             board->n_ghosts = arg_count-1;
@@ -553,12 +570,11 @@ int load_level(board_t *board, int acc_points, char *level_file) {
             for (int i=1; i<arg_count; i++) {
                 strcpy(board->ghosts_files[i-1], args[i]);
             }
-            load_ghost(board); //TODO This will need to be dynamic later
         }
         else { //parse board matrix
             char *board_line_str = args[0];
             for (size_t i=0; i<strlen(board_line_str) && i<(size_t)board->width; i++) {
-                board_pos_t *pos = &board->board[BoardRowParser * board->width + i];
+                board_pos_t *pos = &board->board[get_board_index(board,i,BoardRowParser)];
                 switch (board_line_str[i]) {
                     case 'X':
                         pos->content = 'W';
@@ -566,11 +582,9 @@ int load_level(board_t *board, int acc_points, char *level_file) {
                     case 'o':
                         pos->content = ' ';
                         pos->has_dot = 1;
-                        pos->has_portal = 0;
                         break;
                     case '@':
                         pos->content = ' ';
-                        pos->has_dot = 0;
                         pos->has_portal = 1;
                         break;
                 }
@@ -579,6 +593,9 @@ int load_level(board_t *board, int acc_points, char *level_file) {
         }
         line = strtok_r(NULL, "\n", &line_saveptr);
     }
+
+    load_pacman(board, acc_points);
+    load_ghost(board);
 
     close(fd);
     free(fileText);   

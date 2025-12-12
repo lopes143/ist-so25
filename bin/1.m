@@ -1,3 +1,3 @@
-PASSO 1
+PASSO 0
 POS 4 1
 R
