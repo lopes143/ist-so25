@@ -343,7 +343,7 @@ int load_pacman(board_t *board, int points) {
     board->pacmans=calloc(board->n_pacmans, sizeof(pacman_t));
     pacman_t *pacman = &board->pacmans[board->n_pacmans-1];
     char *path = board->pacman_file;
-    if (*path=='\0') {
+    if (*path=='\0' || strcmp(path, "")==0) {
         //Load default pacman
         
         pacman->alive=1;
@@ -606,6 +606,7 @@ void unload_level(board_t * board) {
     free(board->board);
     free(board->pacmans);
     free(board->ghosts);
+    strcpy(board->pacman_file, "");
 }
 
 void open_debug_file(char *filename) {
