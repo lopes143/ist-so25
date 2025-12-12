@@ -78,7 +78,7 @@ int load_pacman(board_t* board, int points);
 int load_ghost(board_t* board);
 
 /*Loads a level into board*/
-int load_level(board_t *board, int acc_points, char *level_file);
+int load_level(board_t *board, int acc_points, char *parent, char *level_file);
 
 /*Unloads levels loaded by load_level*/
 void unload_level(board_t * board);

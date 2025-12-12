@@ -343,7 +343,7 @@ int load_pacman(board_t *board, int points) {
     board->pacmans=calloc(board->n_pacmans, sizeof(pacman_t));
     pacman_t *pacman = &board->pacmans[board->n_pacmans-1];
     char *path = board->pacman_file;
-    if (*path=='\0' || strcmp(path, "")==0) {
+    if (!strcmp(path, "")) {
         //Load default pacman
         
         pacman->alive=1;
@@ -509,8 +509,11 @@ int load_ghost(board_t *board) {
     return EXIT_SUCCESS;
 }
 
-int load_level(board_t *board, int acc_points, char *level_file) {
-    const int fd = open(level_file, O_RDONLY);
+int load_level(board_t *board, int acc_points, char *parent, char *level_file) {
+    char path[MAX_FILENAME];
+    strcpy(path,parent);
+    strcat(path,level_file);
+    const int fd = open(path, O_RDONLY);
 
     if (fd < 0) {
         perror("Load level file error!");
@@ -562,13 +565,15 @@ int load_level(board_t *board, int acc_points, char *level_file) {
             board->tempo = atoi(args[1]);
         }
         else if (!strcmp(args[0], "PAC")) { //parse PAC
-            strcpy(board->pacman_file, args[1]);
+            strcpy(board->pacman_file, parent);
+            strcat(board->pacman_file, args[1]);
         }
         else if (!strcmp(args[0], "MON")) { //parse MON
             board->n_ghosts = arg_count-1;
             board->ghosts = calloc(board->n_ghosts, sizeof(ghost_t));
             for (int i=1; i<arg_count; i++) {
-                strcpy(board->ghosts_files[i-1], args[i]);
+                strcpy(board->ghosts_files[i-1], parent);
+                strcat(board->ghosts_files[i-1], args[i]);
             }
         }
         else { //parse board matrix
@@ -594,8 +599,9 @@ int load_level(board_t *board, int acc_points, char *level_file) {
         line = strtok_r(NULL, "\n", &line_saveptr);
     }
 
-    load_pacman(board, acc_points);
-    load_ghost(board);
+    if (load_pacman(board, acc_points)) return EXIT_FAILURE;
+    if (load_ghost(board)) return EXIT_FAILURE;
+    strcpy(board->level_name, level_file);
 
     close(fd);
     free(fileText);   
@@ -603,10 +609,11 @@ int load_level(board_t *board, int acc_points, char *level_file) {
 }
 
 void unload_level(board_t * board) {
-    free(board->board);
-    free(board->pacmans);
-    free(board->ghosts);
-    strcpy(board->pacman_file, "");
+    free(board);
+    // free(board->board);
+    // free(board->pacmans);
+    // free(board->ghosts);
+    // strcpy(board->pacman_file, "");
 }
 
 void open_debug_file(char *filename) {
