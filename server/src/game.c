@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <pthread.h>
+#include <fcntl.h>
 
 #define CONTINUE_PLAY 0
 #define NEXT_LEVEL 1
@@ -19,6 +20,11 @@ typedef struct {
     board_t *board;
     int ghost_index;
 } ghost_thread_arg_t;
+
+typedef struct {
+    char req_pipe_path[40];
+    char notif_pipe_path[40];
+} client_data;
 
 int thread_shutdown = 0;
 
@@ -150,10 +156,42 @@ void* ghost_thread(void *arg) {
     }
 }
 
+void* manage_client_thread(void *arg) {
+    client_data *cdata = (client_data*) arg;
+
+    char* req_pipe_path = cdata->req_pipe_path;
+    char* notif_pipe_path = cdata->notif_pipe_path;
+
+    int fdreq, fdnotif;
+
+    if ((fdreq = open (req_pipe_path, O_RDONLY)) < 0) {
+        exit(1);
+    }
+    if ((fdnotif = open (notif_pipe_path, O_RDONLY)) < 0) {
+        exit(1);
+    }
+
+    int accumulated_points = 0;
+    bool end_game = false;
+    board_t game_board;
+
+    free(cdata);
+    pthread_exit(NULL);
+}
+
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        printf("Usage: %s <level_directory>\n", argv[0]);
+    if (argc != 4) {
+        printf("Usage: %s <level_directory> <max_games> <nome_do_FIFO_de_registo>\n", argv[0]);
         return -1;
+    }
+
+    // Create the server Pipe
+    if (mkfifo (argv[3], 0777) < 0) {
+        exit (1);
+    }
+    int fdserv;
+    if ((fdserv = open (argv[3], O_RDONLY)) < 0) {
+        exit(1);
     }
 
     // Random seed for any random movements
