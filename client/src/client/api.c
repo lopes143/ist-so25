@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 
 struct Session {
@@ -74,8 +75,8 @@ int pacman_connect(char const *req_pipe_path, char const *notif_pipe_path, char 
 }
 
 void pacman_play(char command) {
-  if (write(session.req_pipe, "3", 1)<1 || write(session.req_pipe, command, 1)<1)
-    return -1;
+  write(session.req_pipe, "3", 1);
+  write(session.req_pipe, &command, 1);
 }
 
 int pacman_disconnect() {
@@ -87,19 +88,25 @@ int pacman_disconnect() {
 
 Board receive_board_update(void) {
   Board board;
-  char buf;
-  int data[6] = {0};
+  char buf = '\0';
+  char data[24] = {0};
 
-  read(session.notif_pipe, buf, 1);
-  if (buf!='4'); //something is not right
+  while (true) {
+    read(session.notif_pipe, &buf, 1);
+    if (buf=='4') break; //board received
+  }
 
-  read(session.notif_pipe, data, 6);
-  board.width = data[0];
-  board.height = data[1];
-  board.tempo = data[2];
-  board.victory = data[3];
-  board.game_over = data[4];
-  board.accumulated_points = data[5];
+  read(session.notif_pipe, data, 24);
 
+  memcpy(&board.width, data, 4);
+  memcpy(&board.height, data + 4, 4);
+  memcpy(&board.tempo, data + 8, 4);
+  memcpy(&board.victory, data + 12, 4);
+  memcpy(&board.game_over, data + 16, 4);
+  memcpy(&board.accumulated_points, data + 20, 4);
+  
+  board.data = malloc(board.width * board.height);
   read(session.notif_pipe, board.data, board.width*board.height);
+
+  return board;
 }

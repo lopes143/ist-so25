@@ -4,6 +4,7 @@
 #include <string.h>
 #include <time.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -11,11 +12,10 @@
 #include <fcntl.h>
 #include <semaphore.h>
 
+
 #define CONTINUE_PLAY 0
 #define NEXT_LEVEL 1
 #define QUIT_GAME 2
-#define LOAD_BACKUP 3
-#define CREATE_BACKUP 4
 
 #define MAX_PIPE_LEN 81
 
@@ -37,44 +37,33 @@ sem_t clients_semaphore;
 client_data *clients;
 char levels_path[MAX_FILENAME];
 
-int create_backup() {
-    // clear the terminal for process transition
-    terminal_cleanup();
+void send_board(board_t *game_board, int mode, int not_pipe_fd) {
+    char *buf = calloc(7 + game_board->width*game_board->height, sizeof(char));
+    int width = game_board->width;
+    int height = game_board->height;
+    int tempo = game_board->tempo;
+    int victory = (mode == DRAW_WIN) ? 1 : 0;
+    int game_over = (mode == DRAW_GAME_OVER) ? 1 : 0;
+    int points = game_board->pacmans[0].points;
 
-    pid_t child = fork();
+    size_t board_len = (size_t)(width * height);
 
-    if(child != 0) {
-        if (child < 0) {
-            return -1;
-        }
+    // 1 byte for opcode + 24 bytes for 6 integers + board data
+    size_t total_len = 1 + 24 + board_len;
 
-        return child;
-    } else {
-        debug("[%d] Created\n", getpid());
-
-        return 0;
+    buf[0] = '4';
+    memcpy(buf+1, &width, 4);
+    memcpy(buf+5, &height, 4);
+    memcpy(buf+9, &tempo, 4);
+    memcpy(buf+13, &victory, 4);
+    memcpy(buf+17, &game_over, 4);
+    memcpy(buf+21, &points, 4);
+    
+    for (size_t i=0; i<board_len; i++) {
+        memcpy(buf+25+i, &game_board->board[i].content, 1);
     }
-}
-
-void screen_refresh(board_t * game_board, int mode) {
-    debug("REFRESH\n");
-    draw_board(game_board, mode);
-    refresh_screen();     
-}
-
-void* ncurses_thread(void *arg) {
-    board_t *board = (board_t*) arg;
-    sleep_ms(board->tempo / 2);
-    while (true) {
-        sleep_ms(board->tempo);
-        pthread_rwlock_wrlock(&board->state_lock);
-        if (thread_shutdown) {
-            pthread_rwlock_unlock(&board->state_lock);
-            pthread_exit(NULL);
-        }
-        screen_refresh(board, DRAW_MENU);
-        pthread_rwlock_unlock(&board->state_lock);
-    }
+    write(not_pipe_fd, buf, total_len);
+    free(buf);
 }
 
 void* pacman_thread(void *arg) {
@@ -85,8 +74,8 @@ void* pacman_thread(void *arg) {
     int *retval = malloc(sizeof(int));
 
     while (true) {
-        if(!pacman->alive) {
-            *retval = LOAD_BACKUP;
+        if (!pacman->alive) {
+            *retval = QUIT_GAME;
             return (void*) retval;
         }
 
@@ -115,11 +104,6 @@ void* pacman_thread(void *arg) {
             *retval = QUIT_GAME;
             return (void*) retval;
         }
-        // FORK
-        if (play->command == 'G') {
-            *retval = CREATE_BACKUP;
-            return (void*) retval;
-        }
 
         pthread_rwlock_rdlock(&board->state_lock);
 
@@ -132,7 +116,7 @@ void* pacman_thread(void *arg) {
 
         if(result == DEAD_PACMAN) {
             // Restart from child, wait for child, then quit
-            *retval = LOAD_BACKUP;
+            *retval = QUIT_GAME;
             break;
         }
 
@@ -173,14 +157,11 @@ void* manage_client_thread(void *arg) {
 
     int fd_req, fd_notif;
 
-    if ((fd_req = open (req_pipe_path, O_RDONLY)) < 0)
+    if ((fd_req = open(req_pipe_path, O_RDONLY)) < 0)
         goto exit;
 
-    if ((fd_notif = open (notif_pipe_path, O_WRONLY)) < 0)
+    if ((fd_notif = open(notif_pipe_path, O_WRONLY)) < 0)
         goto exit;
-
-    // Random seed for any random movements
-    srand((unsigned int)time(NULL));
 
     DIR* level_dir = opendir(levels_path);
     if (level_dir == NULL)
@@ -230,13 +211,14 @@ void* manage_client_thread(void *arg) {
                 int result = *retval;
                 free(retval);
 
-                if(result == NEXT_LEVEL) {
-                    screen_refresh(&game_board, DRAW_WIN);
+                if (result == NEXT_LEVEL) {
+                    send_board(&game_board, DRAW_WIN, fd_notif);
                     sleep_ms(game_board.tempo);
                     break;
                 }
 
-                if(result == QUIT_GAME) {
+                if (result == QUIT_GAME) {
+                    send_board(&game_board, DRAW_GAME_OVER, fd_notif);
                     sleep_ms(game_board.tempo);
                     end_game = true;
                     break;
@@ -248,15 +230,7 @@ void* manage_client_thread(void *arg) {
         }
     }    
 
-    terminal_cleanup();
-
-    close_debug_file();
-
-    if (closedir(level_dir) == -1) {
-        fprintf(stderr, "Failed to close directory\n");
-        return 0;
-    }
-    return 0;
+    closedir(level_dir);
 
     exit:
     cdata->slot_used = 0;
@@ -272,7 +246,7 @@ int main(int argc, char** argv) {
 
     unlink(argv[3]);
     // Create the server Pipe
-    if (mkfifo (argv[3], 777) < 0) {
+    if (mkfifo(argv[3], 777) < 0) {
         exit(1);
     }
 
@@ -288,12 +262,12 @@ int main(int argc, char** argv) {
 
     char buf[MAX_PIPE_LEN] = {0};
 
-    while (1) {
+    while (true) {
         if (read(fdserv, buf, 81) != 81) {
             continue;
         }
-        //received connection request
 
+        //received connection request
         sem_wait(&clients_semaphore);
         int slot = -1;
 
@@ -314,158 +288,5 @@ int main(int argc, char** argv) {
         pthread_detach(clients[slot].t_client);
     }
 
-    // Random seed for any random movements
-    srand((unsigned int)time(NULL));
-
-    DIR* level_dir = opendir(argv[1]);
-        
-    if (level_dir == NULL) {
-        fprintf(stderr, "Failed to open directory: %s\n", argv[1]);
-        return 0;
-    }
-
-    open_debug_file("debug.log");
-
-    terminal_init();
-    
-    int accumulated_points = 0;
-    bool end_game = false;
-    board_t game_board;
-
-    pid_t parent_process = getpid(); // Only the parent process can create backups
-
-    struct dirent* entry;
-    while ((entry = readdir(level_dir)) != NULL && !end_game) {
-        if (entry->d_name[0] == '.') continue;
-
-        char *dot = strrchr(entry->d_name, '.');
-        if (!dot) continue;
-
-        if (strcmp(dot, ".lvl") == 0) {
-            load_level(&game_board, entry->d_name, argv[1], accumulated_points);
-            draw_board(&game_board, DRAW_MENU);
-            refresh_screen();
-
-            while(true) {
-                pthread_t ncurses_tid, pacman_tid;
-                pthread_t *ghost_tids = malloc(game_board.n_ghosts * sizeof(pthread_t));
-
-                thread_shutdown = 0;
-
-                debug("Creating threads\n");
-
-                pthread_create(&pacman_tid, NULL, pacman_thread, (void*) &game_board);
-                for (int i = 0; i < game_board.n_ghosts; i++) {
-                    ghost_thread_arg_t *arg = malloc(sizeof(ghost_thread_arg_t));
-                    arg->board = &game_board;
-                    arg->ghost_index = i;
-                    pthread_create(&ghost_tids[i], NULL, ghost_thread, (void*) arg);
-                }
-                pthread_create(&ncurses_tid, NULL, ncurses_thread, (void*) &game_board);
-
-                int *retval;
-                pthread_join(pacman_tid, (void**)&retval);
-
-                pthread_rwlock_wrlock(&game_board.state_lock);
-                thread_shutdown = 1;
-                pthread_rwlock_unlock(&game_board.state_lock);
-
-                pthread_join(ncurses_tid, NULL);
-                for (int i = 0; i < game_board.n_ghosts; i++) {
-                    pthread_join(ghost_tids[i], NULL);
-                }
-
-                free(ghost_tids);
-
-                int result = *retval;
-                free(retval);
-
-                if(result == NEXT_LEVEL) {
-                    screen_refresh(&game_board, DRAW_WIN);
-                    sleep_ms(game_board.tempo);
-                    break;
-                }
-
-                if(result == CREATE_BACKUP) {
-                    debug("CREATE_BACKUP\n");
-                    if (parent_process == getpid()) {
-                        debug("PARENT\n");
-                        pid_t child = create_backup();
-                        if (child == -1) {
-                            // failed to fork
-                            debug("[%d] Failed to create backup\n", getpid());
-                            end_game = true;
-                            break;
-                        }
-                        if (child > 0) {
-                            debug("Parent process\n");
-                            int status;
-                            wait(&status);
-
-                            if (WIFEXITED(status)) {
-                                int code = WEXITSTATUS(status);
-                                
-                                if (code == 1) {
-                                    terminal_init();
-                                    debug("[%d] Save Resuming...\n", getpid());
-                                }
-                                else { // End game or error
-                                    end_game = true;
-                                    break;
-                                }
-                            }
-                        } else {
-                            terminal_init();
-                            debug("Child process\n");
-                        }
-
-                    } else {
-                        debug("[%d] Only parent process can have a save\n", getpid());
-                    }
-                }
-
-                if(result == LOAD_BACKUP) {
-                    if(getpid() != parent_process) {
-                        terminal_cleanup();
-                        unload_level(&game_board);
-                        
-                        close_debug_file();
-
-                        if (closedir(level_dir) == -1) {
-                            fprintf(stderr, "Failed to close directory\n");
-                            return 0;
-                        }
-
-                        return 1;
-                    } else {
-                        // No backup process, game over
-                        result = QUIT_GAME;
-                    }
-                }
-
-                if(result == QUIT_GAME) {
-                    screen_refresh(&game_board, DRAW_GAME_OVER); 
-                    sleep_ms(game_board.tempo);
-                    end_game = true;
-                    break;
-                }
-      
-                screen_refresh(&game_board, DRAW_MENU); 
-
-                accumulated_points = game_board.pacmans[0].points;      
-            }
-            print_board(&game_board);
-            unload_level(&game_board);
-        }
-    }    
-
-    terminal_cleanup();
-
-    close_debug_file();
-
-    if (closedir(level_dir) == -1) {
-        fprintf(stderr, "Failed to close directory\n");
-        return 0;
-    }
     return 0;
 }
