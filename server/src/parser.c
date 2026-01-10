@@ -43,7 +43,7 @@ int read_level(board_t* board, char* filename, char* dirname) {
             if (arg1 && arg2) {
                 board->width = atoi(arg1);
                 board->height = atoi(arg2);
-                debug("DIM = %d x %d\n", board->width, board->height);
+                //debug("DIM = %d x %d\n", board->width, board->height);
             }
         }
 
@@ -51,7 +51,7 @@ int read_level(board_t* board, char* filename, char* dirname) {
             char *arg = strtok(NULL, " \t\n");
             if (arg) {
                 board->tempo = atoi(arg);
-                debug("TEMPO = %d\n", board->tempo);
+                //debug("TEMPO = %d\n", board->tempo);
             }
         }
 
@@ -59,7 +59,7 @@ int read_level(board_t* board, char* filename, char* dirname) {
             char *arg = strtok(NULL, " \t\n");
             if (arg) {
                 snprintf(board->pacman_file, sizeof(board->pacman_file), "%s/%s", dirname, arg);
-                debug("PAC = %s\n", board->pacman_file);
+                //debug("PAC = %s\n", board->pacman_file);
             }
         }
 
@@ -68,7 +68,7 @@ int read_level(board_t* board, char* filename, char* dirname) {
             int i = 0;
             while ((arg = strtok(NULL, " \t\n")) != NULL) {
                 snprintf(board->ghosts_files[i], sizeof(board->ghosts_files[0]), "%s/%s", dirname, arg);
-                debug("MON file: %s\n", board->ghosts_files[i]);
+                //debug("MON file: %s\n", board->ghosts_files[i]);
                 i+= 1;
                 if (i == MAX_GHOSTS-1) break;
             }
@@ -97,7 +97,7 @@ int read_level(board_t* board, char* filename, char* dirname) {
         if (command[0]== '#' || command[0] == '\0') continue;
         if (row >= board->height) break;
 
-        debug("Line: %s\n", command);
+        //debug("Line: %s\n", command);
 
         for (int col = 0; col < board -> width; col++){
             int idx = row * board->width + col;
@@ -175,7 +175,7 @@ int read_pacman(board_t* board, int points) {
             if (arg) {
                 pacman->passo = atoi(arg);
                 pacman->waiting = pacman->passo;
-                debug("Pacman passo: %d\n", pacman->passo);
+                //debug("Pacman passo: %d\n", pacman->passo);
             }
         }
         else if (strcmp(word, "POS") == 0) {
@@ -186,7 +186,7 @@ int read_pacman(board_t* board, int points) {
                 pacman->pos_y = atoi(arg2);
                 int idx = pacman->pos_y * board->width + pacman->pos_x;
                 board->board[idx].content = 'P';
-                debug("Pacman Pos = %d x %d\n", pacman->pos_x, pacman->pos_y);
+                //debug("Pacman Pos = %d x %d\n", pacman->pos_x, pacman->pos_y);
             }
         }
         else {
@@ -256,7 +256,7 @@ int read_ghosts(board_t* board) {
                 if (arg) {
                     ghost->passo = atoi(arg);
                     ghost->waiting = ghost->passo;
-                    debug("Ghost passo: %d\n", ghost->passo);
+                    //debug("Ghost passo: %d\n", ghost->passo);
                 }
             }
             else if (strcmp(word, "POS") == 0) {
@@ -267,7 +267,7 @@ int read_ghosts(board_t* board) {
                     ghost->pos_y = atoi(arg2);
                     int idx = ghost->pos_y * board->width + ghost->pos_x;
                     board->board[idx].content = 'M';
-                    debug("Ghost Pos = %d x %d\n", ghost->pos_x, ghost->pos_y);
+                    //debug("Ghost Pos = %d x %d\n", ghost->pos_x, ghost->pos_y);
                 }
             }
             else {

@@ -48,7 +48,7 @@ int pacman_connect(char const *req_pipe_path, char const *notif_pipe_path, char 
   char result[2] = {0};
   while (1) {
     if (read(session.notif_pipe,result,2)==2) {
-      if (!strcmp(result,"10")) { //succeded
+      if (result[0]=='1' && result[1]=='0') { //10: succeded
         goto success;
       }
     }

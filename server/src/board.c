@@ -434,7 +434,7 @@ int move_ghost(board_t* board, int ghost_index, command_t* command) {
 }
 
 void kill_pacman(board_t* board, int pacman_index) {
-    debug("Killing %d pacman\n\n", pacman_index);
+    //debug("Killing %d pacman\n\n", pacman_index);
     pacman_t* pac = &board->pacmans[pacman_index];
     int index = pac->pos_y * board->width + pac->pos_x;
 

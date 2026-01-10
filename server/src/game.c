@@ -20,16 +20,23 @@
 #define MAX_PIPE_LEN 81
 
 typedef struct {
+    int slot_used;
+    pthread_t t_client;
+    int req_pipe_fd;
+    char req_pipe_path[40];
+    int notif_pipe_fd;
+    char notif_pipe_path[40];
+} client_data;
+
+typedef struct {
+    board_t *board;
+    client_data *client;
+} pacman_thread_arg_t;
+
+typedef struct {
     board_t *board;
     int ghost_index;
 } ghost_thread_arg_t;
-
-typedef struct {
-    int slot_used;
-    pthread_t t_client;
-    char req_pipe_path[40];
-    char notif_pipe_path[40];
-} client_data;
 
 int thread_shutdown = 0;
 
@@ -67,9 +74,11 @@ void send_board(board_t *game_board, int mode, int not_pipe_fd) {
 }
 
 void* pacman_thread(void *arg) {
-    board_t *board = (board_t*) arg;
+    pacman_thread_arg_t *pacman_arg = (pacman_thread_arg_t*) arg;
 
-    pacman_t* pacman = &board->pacmans[0];
+    board_t *board = pacman_arg->board;
+    pacman_t *pacman = &board->pacmans[0];
+    int req_pipe_fd = pacman_arg->client->req_pipe_fd;
 
     int *retval = malloc(sizeof(int));
 
@@ -83,21 +92,15 @@ void* pacman_thread(void *arg) {
 
         command_t* play;
         command_t c;
-        if (pacman->n_moves == 0) {
-            c.command = get_input();
+        
+        //get command from pipe
+        char buf[2];
+        read(req_pipe_fd, buf, 2);
+            
+        c.command = buf[1];
 
-            if(c.command == '\0') {
-                continue;
-            }
-
-            c.turns = 1;
-            play = &c;
-        }
-        else {
-            play = &pacman->moves[pacman->current_move%pacman->n_moves];
-        }
-
-        debug("KEY %c\n", play->command);
+        c.turns = 1;
+        play = &c;
 
         // QUIT
         if (play->command == 'Q') {
@@ -155,16 +158,14 @@ void* manage_client_thread(void *arg) {
     char* req_pipe_path = cdata->req_pipe_path;
     char* notif_pipe_path = cdata->notif_pipe_path;
 
-    int fd_req, fd_notif;
-
-    if ((fd_req = open(req_pipe_path, O_RDONLY)) < 0)
+    if ((cdata->req_pipe_fd = open(req_pipe_path, O_RDONLY)) < 0)
         goto exit;
 
-    if ((fd_notif = open(notif_pipe_path, O_WRONLY)) < 0)
+    if ((cdata->notif_pipe_fd = open(notif_pipe_path, O_WRONLY)) < 0)
         goto exit;
 
     //write result to notif pipe
-    write(fd_notif, "10", 2);
+    write(cdata->notif_pipe_fd, "10", 2);
 
     DIR* level_dir = opendir(levels_path);
     if (level_dir == NULL)
@@ -187,15 +188,18 @@ void* manage_client_thread(void *arg) {
             while(true) {
                 pthread_t pacman_tid;
                 pthread_t *ghost_tids = malloc(game_board.n_ghosts * sizeof(pthread_t));
-
                 thread_shutdown = 0;
 
-                pthread_create(&pacman_tid, NULL, pacman_thread, (void*) &game_board);
+                pacman_thread_arg_t *arg = malloc(sizeof(pacman_thread_arg_t));
+                arg->board = &game_board;
+                arg->client = cdata;
+                pthread_create(&pacman_tid, NULL, pacman_thread, (void*)arg);
+
                 for (int i = 0; i < game_board.n_ghosts; i++) {
                     ghost_thread_arg_t *arg = malloc(sizeof(ghost_thread_arg_t));
                     arg->board = &game_board;
                     arg->ghost_index = i;
-                    pthread_create(&ghost_tids[i], NULL, ghost_thread, (void*) arg);
+                    pthread_create(&ghost_tids[i], NULL, ghost_thread, (void*)arg);
                 }
 
                 int *retval;
@@ -215,16 +219,19 @@ void* manage_client_thread(void *arg) {
                 free(retval);
 
                 if (result == NEXT_LEVEL) {
-                    send_board(&game_board, DRAW_WIN, fd_notif);
+                    send_board(&game_board, DRAW_WIN, cdata->notif_pipe_fd);
                     sleep_ms(game_board.tempo);
                     break;
                 }
-
-                if (result == QUIT_GAME) {
-                    send_board(&game_board, DRAW_GAME_OVER, fd_notif);
+                else if (result == QUIT_GAME) {
+                    send_board(&game_board, DRAW_GAME_OVER, cdata->notif_pipe_fd);
                     sleep_ms(game_board.tempo);
                     end_game = true;
                     break;
+                }
+                else {
+                    send_board(&game_board, DRAW_MENU, cdata->notif_pipe_fd);
+                    sleep_ms(game_board.tempo);
                 }
 
                 accumulated_points = game_board.pacmans[0].points;      
@@ -237,6 +244,8 @@ void* manage_client_thread(void *arg) {
 
     exit:
     cdata->slot_used = 0;
+    close(cdata->notif_pipe_fd);
+    close(cdata->req_pipe_fd);
     sem_post(&clients_semaphore);
     return NULL;
 }
@@ -246,7 +255,7 @@ int main(int argc, char** argv) {
         printf("Usage: %s <level_directory> <max_games> <nome_do_FIFO_de_registo>\n", argv[0]);
         return -1;
     }
-
+    
     unlink(argv[3]);
     // Create the server Pipe
     if (mkfifo(argv[3], 0777) < 0) {
@@ -258,6 +267,7 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
+    strcpy(levels_path, argv[1]);
     int num_clients = atoi(argv[2]);
     clients = calloc(num_clients, sizeof(client_data));
     if (sem_init(&clients_semaphore,0,num_clients)<0) exit(1); //init semaphore
@@ -276,7 +286,7 @@ int main(int argc, char** argv) {
 
         //find first empty slot
         for (int i=0; i<num_clients; i++) {
-            if (!clients->slot_used) {
+            if (clients[i].slot_used==0) {
                 slot = i;
                 break;
             }
