@@ -26,40 +26,38 @@ int pacman_connect(char const *req_pipe_path, char const *notif_pipe_path, char 
   unlink(notif_pipe_path);
 
   //Create pipes
-  if (mkfifo(notif_pipe_path, 777)<0) goto fail_notif; //Notification pipe (server->client)
-  if (mkfifo(req_pipe_path, 777)<0) goto fail_req; //Request pipe (client->server)
+  if (mkfifo(notif_pipe_path, 0777)<0) goto fail_notif; //Notification pipe (server->client)
+  if (mkfifo(req_pipe_path, 0777)<0) goto fail_req; //Request pipe (client->server)
 
   //open server pipe
   int server_pipe = open(server_pipe_path, O_WRONLY);
   if (server_pipe<0) goto fail_server; //pipe does not exist
 
-  if ((session.notif_pipe=open(notif_pipe_path,O_RDONLY))<0) goto fail_open_notif;
+  //send request
+  char buf[81] = {0};
+  buf[0] = '1'; // opcode
+  strncpy(buf + 1, req_pipe_path, 40);
+  strncpy(buf + 41, notif_pipe_path, 40);
+  write(server_pipe, buf, 81);
+
   if ((session.req_pipe=open(req_pipe_path,O_WRONLY))<0) goto fail_open_req;
+  if ((session.notif_pipe=open(notif_pipe_path,O_RDONLY))<0) goto fail_open_notif;
   strcpy(session.notif_pipe_path, notif_pipe_path);
 
-  //send request
-  char req[40] = {0};
-  char not[40] = {0};
-  strcpy(req, req_pipe_path);
-  strcpy(not, notif_pipe_path);
-  write(server_pipe, "1", 1);   //opcode
-  write(server_pipe, req, 40);
-  write(server_pipe, not, 40);
-
   //recieve confirmation
-  char buf[2] = {0};
+  char result[2] = {0};
   while (1) {
-    if (read(session.notif_pipe,buf,2)==2) {
-      if (!strcmp(buf,"10")) { //succeded
+    if (read(session.notif_pipe,result,2)==2) {
+      if (!strcmp(result,"10")) { //succeded
         goto success;
       }
     }
   }
 
-  fail_open_req:
-  close(session.notif_pipe);
   fail_open_notif:
   close(session.req_pipe);
+  fail_open_req:
+  close(session.notif_pipe);
   fail_server:
   close(server_pipe);
   fail_req:

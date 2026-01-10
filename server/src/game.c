@@ -163,6 +163,9 @@ void* manage_client_thread(void *arg) {
     if ((fd_notif = open(notif_pipe_path, O_WRONLY)) < 0)
         goto exit;
 
+    //write result to notif pipe
+    write(fd_notif, "10", 2);
+
     DIR* level_dir = opendir(levels_path);
     if (level_dir == NULL)
         goto exit;
@@ -246,7 +249,7 @@ int main(int argc, char** argv) {
 
     unlink(argv[3]);
     // Create the server Pipe
-    if (mkfifo(argv[3], 777) < 0) {
+    if (mkfifo(argv[3], 0777) < 0) {
         exit(1);
     }
 
