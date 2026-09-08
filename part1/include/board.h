@@ -6,6 +6,8 @@
 #define MAX_FILENAME 256
 #define MAX_GHOSTS 25
 
+#include <pthread.h>
+
 typedef enum {
     REACHED_PORTAL = 1,
     VALID_MOVE = 0,
@@ -57,7 +59,14 @@ typedef struct {
     char pacman_file[256];  // file with pacman movements
     char ghosts_files[MAX_GHOSTS][256]; // files with monster movements
     int tempo;              // Duration of each play
+    pthread_mutex_t board_lock;
 } board_t;
+
+typedef struct {
+    board_t *board;
+    int ghost_index;
+    int freeze;
+} ghost_thread_t;
 
 /*Makes the current thread sleep for 'int milliseconds' miliseconds*/
 void sleep_ms(int milliseconds);

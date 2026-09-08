@@ -10,7 +10,6 @@
 #define CONTINUE_PLAY 0
 #define NEXT_LEVEL 1
 #define QUIT_GAME 2
-#define LOAD_BACKUP 3
 #define CREATE_BACKUP 4
 #define PACMAN_DIED 5
 
@@ -26,6 +25,21 @@ void screen_refresh(board_t * game_board, int mode) {
     refresh_screen();
     if(game_board->tempo != 0)
         sleep_ms(game_board->tempo);       
+}
+
+void *move_ghost_thread(void *strct) {
+    ghost_thread_t *gt = (ghost_thread_t*)strct;
+    board_t *board = gt->board;
+    int ghost_index = gt->ghost_index;
+    while (true) {
+        if (gt->freeze==0) {
+            pthread_mutex_lock(&board->board_lock);
+            ghost_t *ghost = &board->ghosts[ghost_index];
+            move_ghost(board, ghost_index, &ghost->moves[ghost->current_move%ghost->n_moves]);
+            screen_refresh(board, DRAW_MENU);
+            pthread_mutex_unlock(&board->board_lock);
+        }
+    }
 }
 
 int play_board(board_t * game_board) {
@@ -58,12 +72,10 @@ int play_board(board_t * game_board) {
         return CREATE_BACKUP;
     }
 
-    if (play->command == 'L') {
-        // Load game state
-        return LOAD_BACKUP;
-    }
-
+    pthread_mutex_lock(&game_board->board_lock);
     int result = move_pacman(game_board, 0, play);
+    pthread_mutex_unlock(&game_board->board_lock);
+
     if (result == REACHED_PORTAL) {
         // Next level
         return NEXT_LEVEL;
@@ -73,12 +85,12 @@ int play_board(board_t * game_board) {
         return PACMAN_DIED;
     }
     
-    for (int i = 0; i < game_board->n_ghosts; i++) {
-        ghost_t* ghost = &game_board->ghosts[i];
-        // avoid buffer overflow wrapping around with modulo of n_moves
-        // this ensures that we always access a valid move for the ghost
-        move_ghost(game_board, i, &ghost->moves[ghost->current_move%ghost->n_moves]);
-    }
+    // for (int i = 0; i < game_board->n_ghosts; i++) {
+    //     ghost_t* ghost = &game_board->ghosts[i];
+    //     // avoid buffer overflow wrapping around with modulo of n_moves
+    //     // this ensures that we always access a valid move for the ghost
+    //     move_ghost(game_board, i, &ghost->moves[ghost->current_move%ghost->n_moves]);
+    // }
 
     if (!game_board->pacmans[0].alive) {
         return QUIT_GAME;
@@ -138,8 +150,19 @@ int main(int argc, char** argv) {
         if (load_level(game_board, accumulated_points, argv[1], levels[current_level])) {
             return EXIT_FAILURE;
         }
+
         draw_board(game_board, DRAW_MENU);
         refresh_screen();
+
+        pthread_t tid[game_board->n_ghosts];
+        ghost_thread_t gt[game_board->n_ghosts];
+
+        for (int i=0; i<game_board->n_ghosts; i++) {
+            gt[i].board=game_board;
+            gt[i].ghost_index=i;
+            gt[i].freeze=0;
+            pthread_create(&tid[i], NULL, move_ghost_thread, &gt[i]);
+        }
 
         while(true) {
             int result = play_board(game_board); 
@@ -154,8 +177,8 @@ int main(int argc, char** argv) {
             if(result == PACMAN_DIED) {
                 if (isInBackup == IN_BACKUP) {
                     exit(0);
-                }else 
-                {
+                }
+                else {
                     result = QUIT_GAME;
                 }
             }
@@ -172,12 +195,17 @@ int main(int argc, char** argv) {
                 if (pid == 0) {
                     isInBackup=IN_BACKUP;
                 } else if (pid > 0) {
+                    for (int i=0; i<game_board->n_ghosts; i++) gt[i].freeze=1;
                     pid = wait(&state);
                     if (WIFEXITED(state)) {
                         int exit_status = WEXITSTATUS(state);
                         if (exit_status == EXIT_WIN) {
                             end_game=true;
                             break;
+                        }
+                        else {
+                            for (int i=0; i<game_board->n_ghosts; i++) 
+                                gt[i].freeze=0;
                         }
                     }
                 }
@@ -188,11 +216,15 @@ int main(int argc, char** argv) {
             }
     
             screen_refresh(game_board, DRAW_MENU); 
-
-            accumulated_points = game_board->pacmans[0].points;      
+            accumulated_points = game_board->pacmans[0].points;
+            
         }
         print_board(game_board);
         unload_level(game_board);
+
+        for (int i=0; i<game_board->n_ghosts; i++) {
+            pthread_exit(&tid[i]);
+        }
     }
     
     if (isInBackup==IN_BACKUP) {

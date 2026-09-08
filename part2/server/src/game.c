@@ -36,6 +36,7 @@ typedef struct {
 typedef struct {
     board_t *board;
     int ghost_index;
+    client_data *client;
 } ghost_thread_arg_t;
 
 int thread_shutdown = 0;
@@ -67,7 +68,13 @@ void send_board(board_t *game_board, int mode, int not_pipe_fd) {
     memcpy(buf+21, &points, 4);
     
     for (size_t i=0; i<board_len; i++) {
-        memcpy(buf+25+i, &game_board->board[i].content, 1);
+        char elem;
+        if (game_board->board[i].has_dot) elem = '.';
+        else if (game_board->board[i].has_portal) elem = '@';
+        else if (game_board->board[i].content=='W') elem = '#';
+        else if (game_board->board[i].content=='P') elem = 'C';
+        else elem = game_board->board[i].content;
+        memcpy(buf+25+i, &elem, 1);
     }
     write(not_pipe_fd, buf, total_len);
     free(buf);
@@ -79,8 +86,10 @@ void* pacman_thread(void *arg) {
     board_t *board = pacman_arg->board;
     pacman_t *pacman = &board->pacmans[0];
     int req_pipe_fd = pacman_arg->client->req_pipe_fd;
+    int not_pipe_fd = pacman_arg->client->notif_pipe_fd;
 
     int *retval = malloc(sizeof(int));
+    free(pacman_arg);
 
     while (true) {
         if (!pacman->alive) {
@@ -111,6 +120,8 @@ void* pacman_thread(void *arg) {
         pthread_rwlock_rdlock(&board->state_lock);
 
         int result = move_pacman(board, 0, play);
+        send_board(board, DRAW_MENU, not_pipe_fd);
+
         if (result == REACHED_PORTAL) {
             // Next level
             *retval = NEXT_LEVEL;
@@ -133,6 +144,8 @@ void* ghost_thread(void *arg) {
     ghost_thread_arg_t *ghost_arg = (ghost_thread_arg_t*) arg;
     board_t *board = ghost_arg->board;
     int ghost_ind = ghost_arg->ghost_index;
+    int not_pipe_fd = ghost_arg->client->notif_pipe_fd;
+
 
     free(ghost_arg);
 
@@ -148,6 +161,7 @@ void* ghost_thread(void *arg) {
         }
         
         move_ghost(board, ghost_ind, &ghost->moves[ghost->current_move%ghost->n_moves]);
+        send_board(board, DRAW_MENU, not_pipe_fd);
         pthread_rwlock_unlock(&board->state_lock);
     }
 }
@@ -199,6 +213,7 @@ void* manage_client_thread(void *arg) {
                     ghost_thread_arg_t *arg = malloc(sizeof(ghost_thread_arg_t));
                     arg->board = &game_board;
                     arg->ghost_index = i;
+                    arg->client = cdata;
                     pthread_create(&ghost_tids[i], NULL, ghost_thread, (void*)arg);
                 }
 
@@ -223,15 +238,11 @@ void* manage_client_thread(void *arg) {
                     sleep_ms(game_board.tempo);
                     break;
                 }
-                else if (result == QUIT_GAME) {
+                if (result == QUIT_GAME) {
                     send_board(&game_board, DRAW_GAME_OVER, cdata->notif_pipe_fd);
                     sleep_ms(game_board.tempo);
                     end_game = true;
                     break;
-                }
-                else {
-                    send_board(&game_board, DRAW_MENU, cdata->notif_pipe_fd);
-                    sleep_ms(game_board.tempo);
                 }
 
                 accumulated_points = game_board.pacmans[0].points;      
@@ -255,7 +266,7 @@ int main(int argc, char** argv) {
         printf("Usage: %s <level_directory> <max_games> <nome_do_FIFO_de_registo>\n", argv[0]);
         return -1;
     }
-    
+
     unlink(argv[3]);
     // Create the server Pipe
     if (mkfifo(argv[3], 0777) < 0) {
